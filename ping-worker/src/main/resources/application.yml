@@ -1,0 +1,48 @@
+server:
+  port: 8082 # Unique port for the ping-worker
+
+spring:
+  application:
+    name: ping-worker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/pingtower}
+    username: ${SPRING_DATASOURCE_USERNAME:pinguser}
+    password: ${SPRING_DATASOURCE_PASSWORD:pingpassword}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+  quartz:
+    datasource: spring # Use the main 'spring.datasource' bean
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: always # Creates Quartz tables on startup
+      platform: postgres # FIX: Correct platform name for Quartz scripts
+    properties:
+      org.quartz.scheduler.interruptJobsOnShutdown: "true"
+      org:
+        quartz:
+          scheduler:
+            instanceId: AUTO
+          jobStore:
+            driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: "true"
+
+clickhouse:
+  datasource:
+    url: ${SPRING_CLICKHOUSE_URL:jdbc:clickhouse://localhost:8123/pingtower}
+    username: ${SPRING_CLICKHOUSE_USERNAME:chuser}
+    password: ${SPRING_CLICKHOUSE_PASSWORD:chpassword}
+    driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"

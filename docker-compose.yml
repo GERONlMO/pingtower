@@ -1,0 +1,205 @@
+version: '3.8'
+
+services:
+  #--------------------------------------------------------------------------
+  # Infrastructure
+  #--------------------------------------------------------------------------
+  postgres:
+    image: postgres:14
+    container_name: postgres
+    environment:
+      POSTGRES_DB: pingtower
+      POSTGRES_USER: pinguser
+      POSTGRES_PASSWORD: pingpassword
+    ports:
+      - "5433:5432" # Changed host port to 5433 to avoid conflict with local PostgreSQL instance
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    environment:
+      CLICKHOUSE_DB: pingtower
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_PASSWORD: chpassword
+    ports:
+      - "8123:8123" # HTTP
+      - "9000:9000" # Native
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./docker/clickhouse/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  kafka-topic-creator:
+    image: confluentinc/cp-kafka:7.3.2
+    depends_on:
+      - kafka
+    networks:
+      - pingtower-network
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...' &&
+        cub kafka-ready -b kafka:29092 1 30 &&
+        echo 'Creating topics...' &&
+        kafka-topics --create --if-not-exists --topic raw-measurements --partitions 1 --replication-factor 1 --bootstrap-server kafka:29092 &&
+        kafka-topics --create --if-not-exists --topic service-status-updates --partitions 1 --replication-factor 1 --bootstrap-server kafka:29092 &&
+        kafka-topics --create --if-not-exists --topic alerts --partitions 1 --replication-factor 1 --bootstrap-server kafka:29092 &&
+        echo 'Topics created.'
+      "
+
+  #--------------------------------------------------------------------------
+  # Application Stubs (for IDE development)
+  #--------------------------------------------------------------------------
+  api-gateway:
+    image: eclipse-temurin:17-jre
+    container_name: api-gateway
+    command: tail -f /dev/null
+    depends_on:
+      - postgres
+      - kafka
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
+      - SPRING_DATASOURCE_USERNAME=pinguser
+      - SPRING_DATASOURCE_PASSWORD=pingpassword
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  auth-service:
+    image: eclipse-temurin:17-jre
+    container_name: auth-service
+    command: tail -f /dev/null
+    depends_on:
+      - postgres
+      - kafka
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
+      - SPRING_DATASOURCE_USERNAME=pinguser
+      - SPRING_DATASOURCE_PASSWORD=pingpassword
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  control-tower:
+    image: eclipse-temurin:17-jre
+    container_name: control-tower
+    command: tail -f /dev/null
+    depends_on:
+      - postgres
+      - kafka
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
+      - SPRING_DATASOURCE_USERNAME=pinguser
+      - SPRING_DATASOURCE_PASSWORD=pingpassword
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  ping-worker:
+    image: eclipse-temurin:17-jre
+    container_name: ping-worker
+    command: tail -f /dev/null
+    depends_on:
+      - postgres
+      - kafka
+      - clickhouse
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
+      - SPRING_DATASOURCE_USERNAME=pinguser
+      - SPRING_DATASOURCE_PASSWORD=pingpassword
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_CLICKHOUSE_URL=jdbc:clickhouse://clickhouse:8123/pingtower
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  reporting-service:
+    image: eclipse-temurin:17-jre
+    container_name: reporting-service
+    command: tail -f /dev/null
+    depends_on:
+      - postgres
+      - kafka
+      - clickhouse
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
+      - SPRING_DATASOURCE_USERNAME=pinguser
+      - SPRING_DATASOURCE_PASSWORD=pingpassword
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_CLICKHOUSE_URL=jdbc:clickhouse://clickhouse:8123/pingtower
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+  #--------------------------------------------------------------------------
+  # Management UI
+  #--------------------------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    # Порт изменен на 9001, так как 9000 занят ClickHouse
+    ports:
+      - "9001:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - pingtower-network
+    restart: unless-stopped
+
+#--------------------------------------------------------------------------
+# Volumes and Networks
+#--------------------------------------------------------------------------
+volumes:
+  pg_data:
+  ch_data:
+  kafka_data:
+  portainer_data:
+
+
+networks:
+  pingtower-network:
+    driver: bridge

@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        # Route for the Authentication Service
+        - id: auth-service
+          uri: http://auth-service:8080
+          predicates:
+            - Path=/auth/**
+
+        # Route for the main business logic service
+        - id: control-tower
+          uri: http://control-tower:8080
+          predicates:
+            - Path=/api/**
+
+        # Route for the reporting service
+        - id: reporting-service
+          uri: http://reporting-service:8080
+          predicates:
+            - Path=/reports/**
+
+        # Debug route to httpbin.org
+        - id: httpbin_debug_route
+          uri: http://httpbin.org
+          predicates:
+            - Path=/debug/**
+          filters:
+            - SetPath=/anything
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    gateway:
+      enabled: true
