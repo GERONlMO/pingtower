@@ -1,235 +1,27 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>PingTower Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.1/dist/sockjs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 {
-            color: #bb86fc;
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-        }
-        th, td {
-            border: 1px solid #333;
-            padding: 12px;
-            text-align: left;
-        }
-        th {
-            background-color: #1f1f1f;
-            color: #bb86fc;
-        }
-        tbody tr:nth-child(even) {
-            background-color: #1e1e1e;
-        }
-        tbody tr:hover {
-            background-color: #333;
-        }
-        .status {
-            padding: 5px 10px;
-            border-radius: 5px;
-            color: #fff;
-            text-align: center;
-            font-weight: bold;
-        }
-        .status-ok { background-color: #03dac6; }
-        .status-warn { background-color: #fdd835; color: #000;}
-        .status-crit { background-color: #cf6679; }
-        .status-unknown { background-color: #424242; }
-        .connection-status {
-            text-align: center;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .status-connected { background-color: #03dac6; color: #000; }
-        .status-disconnected { background-color: #cf6679; }
-    </style>
-</head>
-<body>
-
-<h1>PingTower Dashboard</h1>
-<div id="connection-status" class="connection-status status-disconnected">Connecting...</div>
-<table>
-    <thead>
-    <tr>
-        <th>ID</th>
-        <th>Name</th>
-        <th>Env</th>
-        <th>Status</th>
-        <th>P95 (ms)</th>
-        <th>Avg (ms)</th>
-        <th>Up %</th>
-        <th>Ok</th>
-        <th>DOM Load (ms)</th>
-        <th>TTFB (ms)</th>
-        <th>SSL Days</th>
-        <th>Last Check</th>
-        <th>Online</th>
-    </tr>
-    </thead>
-    <tbody id="dashboard-body">
-    </tbody>
-</table>
-
-<script type="text/javascript">
-    const dashboardBody = document.getElementById('dashboard-body');
-    const connectionStatusDiv = document.getElementById('connection-status');
-    const serviceData = new Map();
-
-    function connect() {
-        const socket = new SockJS('http://localhost:8082/ws/dashboard');
-        const stompClient = Stomp.over(socket);
-
-        stompClient.connect({}, function (frame) {
-            console.log('Connected: ' + frame);
-            setConnectionStatus(true);
-            
-            // Subscribe to get the initial snapshot
-            stompClient.subscribe('/app/dashboard', function (message) {
-                const snapshot = JSON.parse(message.body);
-                console.log("Received snapshot:", snapshot);
-                snapshot.forEach(service => serviceData.set(service.id, service));
-                renderTable();
-            });
-
-            // Subscribe to get real-time updates
-            stompClient.subscribe('/topic/dashboard.update', function (message) {
-                const updatedService = JSON.parse(message.body);
-                console.log("Received update:", updatedService);
-                updateOrAddRow(updatedService);
-            });
-
-        }, function(error) {
-            console.error('STOMP error:', error);
-            setConnectionStatus(false);
-            setTimeout(connect, 5000); // Attempt to reconnect after 5 seconds
-        });
-    }
-    
-    function renderTable() {
-        dashboardBody.innerHTML = '';
-        const sortedServices = Array.from(serviceData.values()).sort((a, b) => a.id.localeCompare(b.id));
-
-        for (const service of sortedServices) {
-            const row = document.createElement('tr');
-            row.id = `service-${service.id}`; // Add unique ID to each row
-            row.innerHTML = createRowContent(service);
-            dashboardBody.appendChild(row);
-        }
-    }
-
-    function updateOrAddRow(service) {
-        let row = document.getElementById(service.id);
-        if (!row) {
-            row = document.createElement('tr');
-            row.id = service.id;
-            dashboardBody.appendChild(row);
-        }
-
-        const statusInfo = getStatusInfo(service.st);
-
-        // This is the robust way: always rewrite the full row content on update.
-        row.innerHTML = `
-            <td>${service.id}</td>
-            <td>${service.n}</td>
-            <td>${service.e}</td>
-            <td><span class="status-badge" style="background-color: ${statusInfo.color};">${statusInfo.text}</span></td>
-            <td>${(service.p95 || 0).toFixed(2)}</td>
-            <td>${(service.avg || 0).toFixed(2)}</td>
-            <td>${(service.up || 0).toFixed(2)}%</td>
-            <td>${service.ok || 0}</td>
-            <td>${service.dlt > 0 ? service.dlt : ''}</td>
-            <td>${service.ttfb > 0 ? service.ttfb : ''}</td>
-            <td style="${getSslCellStyle(service.ssl)}">${service.ssl > 0 ? service.ssl : ''}</td>
-            <td>${formatDate(service.lc)}</td>
-            <td><span class="online-status" style="background-color: ${service.io ? '#28a745' : '#dc3545'};"></span></td>
-        `;
-
-        // Highlight the row on update
-        row.classList.add('highlight');
-        setTimeout(() => row.classList.remove('highlight'), 1000);
-    }
-
-    // Helper function to generate row content
-    function createRowContent(service) {
-        const statusInfo = getStatusInfo(service.st);
-        return `
-            <td>${service.id}</td>
-            <td>${service.n}</td>
-            <td>${service.e}</td>
-            <td><span class="status-badge" style="background-color: ${statusInfo.color};">${statusInfo.text}</span></td>
-            <td>${(service.p95 || 0).toFixed(2)}</td>
-            <td>${(service.avg || 0).toFixed(2)}</td>
-            <td>${(service.up || 0).toFixed(2)}%</td>
-            <td>${service.ok || 0}</td>
-            <td>${service.dlt > 0 ? service.dlt : ''}</td>
-            <td>${service.ttfb > 0 ? service.ttfb : ''}</td>
-            <td style="${getSslCellStyle(service.ssl)}">${service.ssl > 0 ? service.ssl : ''}</td>
-            <td>${formatDate(service.lc)}</td>
-            <td><span class="online-status" style="background-color: ${service.io ? '#28a745' : '#dc3545'};"></span></td>
-        `;
-    }
-
-    function getSslCellStyle(days) {
-        if (days === null || days === undefined) return '';
-        if (days < 7) return 'background-color: #dc3545; color: white;'; // Red
-        if (days < 30) return 'background-color: #ffc107; color: black;'; // Yellow
-        return '';
-    }
-
-    function getStatusInfo(statusText) {
-        if (!statusText) {
-            return { text: 'UNKNOWN', color: 'grey' };
-        }
-        const lowerStatus = statusText.toLowerCase();
-
-        if (lowerStatus.startsWith('2') || lowerStatus === 'page loaded' || lowerStatus === 'ok') {
-            return { text: statusText, color: '#28a745' }; // Green
-        } else if (lowerStatus.startsWith('4')) {
-            return { text: statusText, color: '#ffc107' }; // Yellow
-        } else if (lowerStatus.startsWith('5') || lowerStatus.includes('timeout') || lowerStatus.includes('exception') || lowerStatus === 'crit') {
-            return { text: statusText, color: '#dc3545' }; // Red
-        } else {
-            return { text: statusText, color: 'grey' }; // Grey for UNKNOWN or other statuses
-        }
-    }
-    
-    function formatDate(dateString) {
-        if (!dateString) return 'N/A';
-        const date = new Date(dateString);
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear();
-        const time = date.toLocaleTimeString('ru-RU');
-        return `${day}.${month}.${year}, ${time}`;
-    }
-    
-    function setConnectionStatus(isConnected) {
-        if (isConnected) {
-            connectionStatusDiv.textContent = 'Connected';
-            connectionStatusDiv.className = 'connection-status status-connected';
-        } else {
-            connectionStatusDiv.textContent = 'Disconnected. Retrying...';
-            connectionStatusDiv.className = 'connection-status status-disconnected';
-        }
-    }
-
-    connect();
-</script>
-
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FSD React Vite MUI App</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+    />
+    <script>
+      // Polyfill for global variable required by some libraries
+      if (typeof global === 'undefined') {
+        window.global = window;
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

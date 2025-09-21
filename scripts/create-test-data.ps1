@@ -78,8 +78,13 @@ foreach ($site in $testData) {
     $serviceBody = [PSCustomObject]@{
         id = $site.Id
         name = $site.Name
+        url = $site.Url
         environment = $site.Env
         projectId = $projectId
+        intervalSec = 60
+        timeoutSec = 5
+        degradationThresholdMs = 2000
+        enabled = $true
     } | ConvertTo-Json
     
     Invoke-WebRequest -Uri "$apiUrl/services" -Method POST -Headers $headers -Body $serviceBody -ErrorAction SilentlyContinue | Out-Null
