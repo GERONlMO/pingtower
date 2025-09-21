@@ -1,0 +1,121 @@
+@startuml PingTower Architecture
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+
+title PingTower - System Architecture
+
+' Define colors
+skinparam component {
+  BackgroundColor<<Frontend>> #E8F4FD
+  BackgroundColor<<Gateway>> #FFE6CC
+  BackgroundColor<<Service>> #D4F1D4
+  BackgroundColor<<Database>> #F0E6FF
+  BackgroundColor<<Infrastructure>> #FFEBE6
+}
+
+' Frontend Layer
+package "Frontend Layer" {
+  [Web Dashboard] <<Frontend>> as frontend
+}
+
+' API Gateway Layer
+package "API Gateway Layer" {
+  [API Gateway\n(Port 8080)] <<Gateway>> as gateway
+  [Authentication Filter] <<Gateway>> as authfilter
+}
+
+' Microservices Layer
+package "Microservices Layer" {
+  [Auth Service\n(Port 8081)] <<Service>> as auth
+  [Control Tower\n(Port 8082)] <<Service>> as control
+  [Ping Worker\n(Port 8082)] <<Service>> as worker
+  [Reporting Service\n(Port 8083)] <<Service>> as reporting
+}
+
+' Database Layer
+package "Database Layer" {
+  database "PostgreSQL\n(Port 5433)" <<Database>> as postgres
+  database "ClickHouse\n(Port 8123/9000)" <<Database>> as clickhouse
+}
+
+' Infrastructure Layer
+package "Infrastructure Layer" {
+  queue "Apache Kafka\n(Port 9092)" <<Infrastructure>> as kafka
+  [Zookeeper\n(Port 2181)] <<Infrastructure>> as zookeeper
+  [Portainer\n(Port 9001)] <<Infrastructure>> as portainer
+}
+
+' External Services
+cloud "External Sites" as external
+
+' Frontend connections
+frontend --> gateway : HTTP Requests\n(REST API)
+frontend --> control : WebSocket\n(Real-time updates)
+
+' Gateway routing
+gateway --> auth : /auth/**
+gateway --> control : /api/**
+gateway --> reporting : /reports/**
+
+' Authentication flow
+authfilter ..> auth : JWT Validation
+
+' Service connections to databases
+auth --> postgres : User data
+control --> postgres : Services & Checks
+control --> clickhouse : Metrics & Analytics
+worker --> postgres : Check definitions
+worker --> clickhouse : Store measurements
+reporting --> postgres : Report data
+reporting --> clickhouse : Analytics data
+
+' Kafka messaging
+worker --> kafka : Raw measurements\nService status updates\nAlerts
+control --> kafka : Consume status updates\nConsume alerts
+kafka --> zookeeper : Coordination
+
+' External monitoring
+worker --> external : HTTP/Browser/SSL checks
+
+' Management
+portainer ..> gateway : Container management
+portainer ..> control : Container management
+portainer ..> worker : Container management
+
+note top of frontend
+  Single Page Application
+  - Real-time dashboard
+  - Service monitoring
+  - WebSocket connection
+end note
+
+note right of gateway
+  Routes:
+  • /auth/** → Auth Service
+  • /api/** → Control Tower
+  • /reports/** → Reporting Service
+  
+  Features:
+  • JWT Authentication
+  • Request routing
+  • CORS handling
+end note
+
+note bottom of worker
+  Scheduled Tasks:
+  • HTTP checks every 30s
+  • Browser automation
+  • SSL certificate monitoring
+  • Publishes to Kafka topics
+end note
+
+note right of kafka
+  Topics:
+  • raw-measurements
+  • service-status-updates
+  • alerts
+end note
+
+@enduml

@@ -43,4 +43,17 @@ public class Service {
     private Timestamp lastCheck;
 
     private UUID projectId;
+
+    private String url;
+
+    @Column(name = "interval_sec")
+    private Integer intervalSec;
+
+    @Column(name = "timeout_sec")
+    private Integer timeoutSec;
+
+    @Column(name = "degradation_threshold_ms")
+    private Integer degradationThresholdMs;
+
+    private Boolean enabled;
 }

@@ -34,7 +34,17 @@ clickhouse:
     driver-class-name: com.clickhouse.jdbc.ClickHouseDriver
 
 server:
-  port: 8081 # Using a different port to avoid conflicts with other services
+  port: 8081
+
+# Swagger/OpenAPI Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+  show-actuator: true # Using a different port to avoid conflicts with other services
 
 # Telegram Bot Configuration
 telegram:

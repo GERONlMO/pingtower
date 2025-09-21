@@ -1,0 +1,129 @@
+@startuml PingTower Interactions
+!theme plain
+skinparam backgroundColor #FAFAFA
+skinparam defaultFontName Arial
+skinparam sequenceArrowThickness 2
+skinparam sequenceLifeLineBorderColor DarkBlue
+skinparam sequenceLifeLineBackgroundColor #E8F4FD
+
+title PingTower - Service Interactions & Data Flow
+
+actor User as user
+participant "Web Dashboard\n(Frontend)" as frontend
+participant "API Gateway\n:8080" as gateway
+participant "Auth Service\n:8081" as auth
+participant "Control Tower\n:8082" as control
+participant "Ping Worker\n:8082" as worker
+participant "Reporting Service\n:8083" as reporting
+database "PostgreSQL\n:5433" as postgres
+database "ClickHouse\n:8123" as clickhouse
+queue "Kafka\n:9092" as kafka
+
+== Authentication Flow ==
+user -> frontend : Open Dashboard
+frontend -> gateway : POST /auth/login
+gateway -> auth : Forward login request
+auth -> postgres : Validate credentials
+postgres --> auth : User data
+auth --> gateway : JWT Token
+gateway --> frontend : JWT Token
+frontend -> frontend : Store JWT token
+
+== Service Management ==
+user -> frontend : Add new service
+frontend -> gateway : POST /api/services\n(with JWT)
+gateway -> gateway : Validate JWT with Auth Service
+gateway -> control : Forward request
+control -> postgres : INSERT service
+postgres --> control : Service created
+control --> gateway : Success response
+gateway --> frontend : Service created
+frontend -> user : Show success
+
+== Real-time Dashboard Connection ==
+frontend -> control : Connect WebSocket\n/ws/dashboard
+control -> frontend : WebSocket established
+frontend -> control : Subscribe /app/dashboard
+control -> postgres : Get all services
+control -> clickhouse : Get metrics (24h)
+control --> frontend : Dashboard snapshot (JSON)
+
+== Monitoring Cycle ==
+worker -> postgres : Read active checks
+postgres --> worker : Check definitions
+loop Every 30 seconds
+    worker -> worker : Execute HTTP/Browser/SSL checks
+    worker -> clickhouse : Store raw measurements
+    worker -> kafka : Publish to topics:\n- raw-measurements\n- service-status-updates\n- alerts
+end
+
+== Real-time Updates ==
+kafka -> control : Consume service-status-updates
+control -> postgres : Update service status
+control -> control : Prepare dashboard update
+control -> frontend : Broadcast via WebSocket\n/topic/dashboard
+frontend -> frontend : Update dashboard UI
+frontend -> user : Show real-time status
+
+== Reporting ==
+user -> frontend : Request report
+frontend -> gateway : GET /reports/...\n(with JWT)
+gateway -> reporting : Forward request
+reporting -> postgres : Get service data
+reporting -> clickhouse : Get aggregated metrics
+reporting --> gateway : Report data
+gateway --> frontend : Report data
+frontend -> user : Display report
+
+== Manual Refresh ==
+user -> frontend : Click refresh
+frontend -> control : Send /app/refresh via WebSocket
+control -> postgres : Get fresh service data
+control -> clickhouse : Get latest metrics
+control -> frontend : Broadcast updated data\n/topic/dashboard
+frontend -> frontend : Update UI
+frontend -> user : Fresh data displayed
+
+== Alert Flow ==
+worker -> kafka : Publish alert\n(service down)
+kafka -> control : Consume alert
+control -> control : Process alert
+control -> control : Send Telegram notification
+control -> frontend : Broadcast status change\n/topic/dashboard
+frontend -> user : Show alert in dashboard
+
+note over frontend
+  **Frontend Features:**
+  • SockJS + STOMP WebSocket
+  • Real-time dashboard updates
+  • JWT token management
+  • Service CRUD operations
+end note
+
+note over gateway
+  **API Gateway Routes:**
+  • /auth/** → Auth Service
+  • /api/** → Control Tower  
+  • /reports/** → Reporting Service
+  
+  **Security:**
+  • JWT validation for /api/**
+  • CORS configuration
+end note
+
+note over worker
+  **Ping Worker:**
+  • Quartz scheduler (30s intervals)
+  • HTTP/Browser/SSL checks
+  • WebDriver pool for browser tests
+  • Kafka producer
+end note
+
+note over kafka
+  **Kafka Topics:**
+  • raw-measurements
+  • service-status-updates
+  • alerts
+end note
+
+@enduml
