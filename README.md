@@ -1,3 +1,6 @@
+ссылка на видео https://drive.google.com/file/d/1AHm5nR6Kqot4B-UAyN9S9wRr2PtJnGqY/view?usp=drivesdk
+
+
 # 🏗️ PingTower - Distributed Monitoring System
 
 <div align="center">
