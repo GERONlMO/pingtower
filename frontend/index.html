@@ -91,7 +91,7 @@
     const serviceData = new Map();
 
     function connect() {
-        const socket = new SockJS('http://localhost:8081/ws/dashboard');
+        const socket = new SockJS('http://localhost:8082/ws/dashboard');
         const stompClient = Stomp.over(socket);
 
         stompClient.connect({}, function (frame) {

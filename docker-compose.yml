@@ -53,6 +53,8 @@ services:
     container_name: kafka
     depends_on:
       - zookeeper
+      - postgres
+      - clickhouse
     ports:
       - "9092:9092"
       - "29092:29092"
@@ -64,6 +66,9 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_LOG_DIRS: /tmp/kafka-logs
+      KAFKA_LOG_RETENTION_HOURS: 24
     volumes:
       - kafka_data:/var/lib/kafka/data
     networks:
@@ -88,88 +93,108 @@ services:
       "
 
   #--------------------------------------------------------------------------
-  # Application Stubs (for IDE development)
+  # Application Services
   #--------------------------------------------------------------------------
   api-gateway:
-    image: eclipse-temurin:17-jre
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
     container_name: api-gateway
-    command: tail -f /dev/null
     depends_on:
       - postgres
       - kafka
+      - kafka-topic-creator
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
       - SPRING_DATASOURCE_USERNAME=pinguser
       - SPRING_DATASOURCE_PASSWORD=pingpassword
-      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:29092
+    ports:
+      - "8080:8080"
     networks:
       - pingtower-network
     restart: unless-stopped
 
   auth-service:
-    image: eclipse-temurin:17-jre
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
     container_name: auth-service
-    command: tail -f /dev/null
     depends_on:
       - postgres
       - kafka
+      - kafka-topic-creator
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
       - SPRING_DATASOURCE_USERNAME=pinguser
       - SPRING_DATASOURCE_PASSWORD=pingpassword
-      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:29092
+    ports:
+      - "8081:8081"
     networks:
       - pingtower-network
     restart: unless-stopped
 
   control-tower:
-    image: eclipse-temurin:17-jre
+    build:
+      context: ./control-tower
+      dockerfile: Dockerfile
     container_name: control-tower
-    command: tail -f /dev/null
     depends_on:
       - postgres
       - kafka
+      - clickhouse
+      - kafka-topic-creator
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
       - SPRING_DATASOURCE_USERNAME=pinguser
       - SPRING_DATASOURCE_PASSWORD=pingpassword
-      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:29092
+      - SPRING_CLICKHOUSE_URL=jdbc:clickhouse://clickhouse:8123/pingtower
+    ports:
+      - "8082:8081"
     networks:
       - pingtower-network
     restart: unless-stopped
 
   ping-worker:
-    image: eclipse-temurin:17-jre
+    build:
+      context: ./ping-worker
+      dockerfile: Dockerfile
     container_name: ping-worker
-    command: tail -f /dev/null
     depends_on:
       - postgres
       - kafka
       - clickhouse
+      - kafka-topic-creator
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
       - SPRING_DATASOURCE_USERNAME=pinguser
       - SPRING_DATASOURCE_PASSWORD=pingpassword
-      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:29092
       - SPRING_CLICKHOUSE_URL=jdbc:clickhouse://clickhouse:8123/pingtower
     networks:
       - pingtower-network
     restart: unless-stopped
 
   reporting-service:
-    image: eclipse-temurin:17-jre
+    build:
+      context: ./reporting-service
+      dockerfile: Dockerfile
     container_name: reporting-service
-    command: tail -f /dev/null
     depends_on:
       - postgres
       - kafka
       - clickhouse
+      - kafka-topic-creator
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/pingtower
       - SPRING_DATASOURCE_USERNAME=pinguser
       - SPRING_DATASOURCE_PASSWORD=pingpassword
-      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:9092
+      - SPRING_KAFKA_BOOTSTRAP-SERVERS=kafka:29092
       - SPRING_CLICKHOUSE_URL=jdbc:clickhouse://clickhouse:8123/pingtower
+    ports:
+      - "8083:8083"
     networks:
       - pingtower-network
     restart: unless-stopped

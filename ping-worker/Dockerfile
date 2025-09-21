@@ -5,8 +5,17 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn package -DskipTests
 
-FROM eclipse-temurin:17-jre-alpine
+FROM selenium/standalone-chrome:latest
+
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        openjdk-17-jre \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-ARG JAR_FILE
-COPY --from=builder /app/target/${JAR_FILE} app.jar
+COPY --from=builder /app/target/*.jar app.jar
+
+USER seluser
 ENTRYPOINT ["java", "-jar", "app.jar"]
