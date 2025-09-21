@@ -9,6 +9,7 @@ import org.hibernate.annotations.Type;
 
 
 import java.util.UUID;
+import java.sql.Timestamp;
 
 @Entity
 @Data
@@ -23,8 +24,6 @@ public class Check {
 
     private String serviceId;
 
-    private String type; // e.g., 'HTTP', 'SSL'
-
     private Boolean enabled;
 
     private String schedule;
@@ -33,7 +32,15 @@ public class Check {
     @Column(columnDefinition = "jsonb")
     private String config;
 
+    @Column(name = "last_status")
     private Integer lastStatus;
 
+    @Column(name = "last_latency_ms")
     private Integer lastLatencyMs;
+
+    @Column(name = "last_execution")
+    private Timestamp lastExecution;
+
+    @Column(name = "type")
+    private String type; // "HTTP", "SSL", etc.
 }

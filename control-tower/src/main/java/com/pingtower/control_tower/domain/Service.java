@@ -1,11 +1,13 @@
 package com.pingtower.control_tower.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -22,9 +24,23 @@ public class Service {
 
     private String environment; // 'prod', 'stage', 'dev'
 
-    private Integer status;
+    @Column(name = "status")
+    private Integer status; // 0 = CRIT, 1 = OK, 2 = UNKNOWN
 
-    private LocalDateTime lastCheck;
+    @Column(name = "last_status_text")
+    private String lastStatusText;
+
+    @Column(name = "last_dom_load_time_ms")
+    private Integer lastDomLoadTimeMs;
+
+    @Column(name = "last_ttfb_ms")
+    private Integer lastTtfbMs;
+
+    @Column(name = "ssl_expires_in_days")
+    private Integer sslExpiresInDays;
+
+    @Column(name = "last_check")
+    private Timestamp lastCheck;
 
     private UUID projectId;
 }

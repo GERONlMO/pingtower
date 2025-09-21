@@ -92,19 +92,37 @@ public class DashboardDataService {
             metrics = new ClickHouseMetricsDto(0, 0, 0, 0);
         }
 
-        double uptime = (metrics.getTotalCount() > 0) ? (double) metrics.getOkCount() / metrics.getTotalCount() * 100 : 0.0;
+        double uptimePercentage = (metrics.getTotalCount() > 0)
+                ? ((double) metrics.getOkCount() / metrics.getTotalCount()) * 100
+                : (service.getStatus() != null && service.getStatus() == 1 ? 100.0 : 0.0);
+
+        // This is the correct logic: isOnline is true if the last check was successful.
+        boolean isOnline = service.getStatus() != null && service.getStatus() == 1;
 
         return DashboardServiceDto.builder()
                 .id(service.getId())
                 .n(service.getName())
                 .e(service.getEnvironment())
-                .st(service.getStatus())
+                .st(service.getLastStatusText() != null ? service.getLastStatusText() : getStatusTextFromCode(service.getStatus()))
                 .p95(metrics.getP95())
                 .avg(metrics.getAvg())
-                .up(uptime)
+                .up(uptimePercentage)
                 .ok(metrics.getOkCount())
+                .dlt(service.getLastDomLoadTimeMs())
+                .ttfb(service.getLastTtfbMs())
+                .ssl(service.getSslExpiresInDays())
                 .lc(service.getLastCheck())
-                .io(service.getStatus() != null && service.getStatus() == 1)
+                .io(isOnline)
                 .build();
+    }
+
+    private String getStatusTextFromCode(Integer statusCode) {
+        if (statusCode == null) return "Unknown";
+        return switch (statusCode) {
+            case 0 -> "CRIT";
+            case 1 -> "OK";
+            case 2 -> "UNKNOWN";
+            default -> "Invalid";
+        };
     }
 }

@@ -74,6 +74,9 @@
         <th>Avg (ms)</th>
         <th>Up %</th>
         <th>Ok</th>
+        <th>DOM Load (ms)</th>
+        <th>TTFB (ms)</th>
+        <th>SSL Days</th>
         <th>Last Check</th>
         <th>Online</th>
     </tr>
@@ -107,8 +110,7 @@
             stompClient.subscribe('/topic/dashboard.update', function (message) {
                 const updatedService = JSON.parse(message.body);
                 console.log("Received update:", updatedService);
-                serviceData.set(updatedService.id, updatedService);
-                renderTable();
+                updateOrAddRow(updatedService);
             });
 
         }, function(error) {
@@ -124,38 +126,96 @@
 
         for (const service of sortedServices) {
             const row = document.createElement('tr');
-            
-            const statusInfo = getStatusInfo(service.st);
-
-            row.innerHTML = `
-                <td>${service.id}</td>
-                <td>${service.n}</td>
-                <td>${service.e}</td>
-                <td><div class="status ${statusInfo.className}">${statusInfo.text}</div></td>
-                <td>${service.p95.toFixed(2)}</td>
-                <td>${service.avg.toFixed(2)}</td>
-                <td>${service.up.toFixed(2)}%</td>
-                <td>${service.ok}</td>
-                <td>${formatDate(service.lc)}</td>
-                <td>${service.io ? '✅' : '❌'}</td>
-            `;
+            row.id = `service-${service.id}`; // Add unique ID to each row
+            row.innerHTML = createRowContent(service);
             dashboardBody.appendChild(row);
         }
     }
 
-    function getStatusInfo(statusCode) {
-        switch (statusCode) {
-            case 1: return { text: 'OK', className: 'status-ok' };
-            case 0: return { text: 'CRIT', className: 'status-crit' };
-            // Add more cases here, e.g., for WARN
-            default: return { text: 'UNKNOWN', className: 'status-unknown' };
+    function updateOrAddRow(service) {
+        let row = document.getElementById(service.id);
+        if (!row) {
+            row = document.createElement('tr');
+            row.id = service.id;
+            dashboardBody.appendChild(row);
+        }
+
+        const statusInfo = getStatusInfo(service.st);
+
+        // This is the robust way: always rewrite the full row content on update.
+        row.innerHTML = `
+            <td>${service.id}</td>
+            <td>${service.n}</td>
+            <td>${service.e}</td>
+            <td><span class="status-badge" style="background-color: ${statusInfo.color};">${statusInfo.text}</span></td>
+            <td>${(service.p95 || 0).toFixed(2)}</td>
+            <td>${(service.avg || 0).toFixed(2)}</td>
+            <td>${(service.up || 0).toFixed(2)}%</td>
+            <td>${service.ok || 0}</td>
+            <td>${service.dlt > 0 ? service.dlt : ''}</td>
+            <td>${service.ttfb > 0 ? service.ttfb : ''}</td>
+            <td style="${getSslCellStyle(service.ssl)}">${service.ssl > 0 ? service.ssl : ''}</td>
+            <td>${formatDate(service.lc)}</td>
+            <td><span class="online-status" style="background-color: ${service.io ? '#28a745' : '#dc3545'};"></span></td>
+        `;
+
+        // Highlight the row on update
+        row.classList.add('highlight');
+        setTimeout(() => row.classList.remove('highlight'), 1000);
+    }
+
+    // Helper function to generate row content
+    function createRowContent(service) {
+        const statusInfo = getStatusInfo(service.st);
+        return `
+            <td>${service.id}</td>
+            <td>${service.n}</td>
+            <td>${service.e}</td>
+            <td><span class="status-badge" style="background-color: ${statusInfo.color};">${statusInfo.text}</span></td>
+            <td>${(service.p95 || 0).toFixed(2)}</td>
+            <td>${(service.avg || 0).toFixed(2)}</td>
+            <td>${(service.up || 0).toFixed(2)}%</td>
+            <td>${service.ok || 0}</td>
+            <td>${service.dlt > 0 ? service.dlt : ''}</td>
+            <td>${service.ttfb > 0 ? service.ttfb : ''}</td>
+            <td style="${getSslCellStyle(service.ssl)}">${service.ssl > 0 ? service.ssl : ''}</td>
+            <td>${formatDate(service.lc)}</td>
+            <td><span class="online-status" style="background-color: ${service.io ? '#28a745' : '#dc3545'};"></span></td>
+        `;
+    }
+
+    function getSslCellStyle(days) {
+        if (days === null || days === undefined) return '';
+        if (days < 7) return 'background-color: #dc3545; color: white;'; // Red
+        if (days < 30) return 'background-color: #ffc107; color: black;'; // Yellow
+        return '';
+    }
+
+    function getStatusInfo(statusText) {
+        if (!statusText) {
+            return { text: 'UNKNOWN', color: 'grey' };
+        }
+        const lowerStatus = statusText.toLowerCase();
+
+        if (lowerStatus.startsWith('2') || lowerStatus === 'page loaded' || lowerStatus === 'ok') {
+            return { text: statusText, color: '#28a745' }; // Green
+        } else if (lowerStatus.startsWith('4')) {
+            return { text: statusText, color: '#ffc107' }; // Yellow
+        } else if (lowerStatus.startsWith('5') || lowerStatus.includes('timeout') || lowerStatus.includes('exception') || lowerStatus === 'crit') {
+            return { text: statusText, color: '#dc3545' }; // Red
+        } else {
+            return { text: statusText, color: 'grey' }; // Grey for UNKNOWN or other statuses
         }
     }
     
     function formatDate(dateString) {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        return date.toLocaleString();
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        const time = date.toLocaleTimeString('ru-RU');
+        return `${day}.${month}.${year}, ${time}`;
     }
     
     function setConnectionStatus(isConnected) {

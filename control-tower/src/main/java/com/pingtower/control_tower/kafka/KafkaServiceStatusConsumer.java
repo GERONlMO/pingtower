@@ -10,6 +10,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Objects;
@@ -45,7 +46,7 @@ public class KafkaServiceStatusConsumer {
                 service -> {
                     log.info("Updating service {} to status {}", serviceId, newStatusStr);
                     service.setStatus(newStatus);
-                    service.setLastCheck(LocalDateTime.now());
+                    service.setLastCheck(Timestamp.valueOf(LocalDateTime.now()));
                     serviceRepository.save(service);
                     log.info("Service {} updated in PostgreSQL.", serviceId);
 

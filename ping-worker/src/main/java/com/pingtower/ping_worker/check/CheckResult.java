@@ -8,6 +8,11 @@ import lombok.Data;
 public class CheckResult {
     private boolean success;
     private int responseCode;
-    private long latencyMs;
+    private String statusText; // e.g., "200 OK", "Connection Timeout"
+    private long latencyMs; // Total time from start to finish
+    private Long domLoadTimeMs; // Time to DOMContentLoaded
+    private Long ttfbMs; // Time to First Byte
+    private Long sslExpiresInDays; // Days until SSL certificate expires
     private String errorMessage;
+    private String details;
 }

@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.Type;
 
+import java.sql.Timestamp;
 import java.util.UUID;
 
 @Entity
@@ -27,7 +28,16 @@ public class Check {
     @Column(columnDefinition = "jsonb")
     private String config;
 
+    @Column(name = "last_status")
     private Integer lastStatus;
 
+    @Column(name = "last_latency_ms")
     private Integer lastLatencyMs;
+
+    @Column(name = "last_execution")
+    private Timestamp lastExecution;
+
+    public String getConfig() {
+        return config;
+    }
 }
